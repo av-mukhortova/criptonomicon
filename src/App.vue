@@ -1,6 +1,7 @@
 <template>
   <div class="container mx-auto flex flex-col items-center bg-gray-100 p-4">
-    <!--<div
+    <div
+      v-show="loading"
       class="fixed w-100 h-100 opacity-80 bg-purple-800 inset-0 z-50 flex items-center justify-center"
     >
       <svg
@@ -23,7 +24,7 @@
           d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
         ></path>
       </svg>
-    </div>-->
+    </div>
     <div class="container">
       <section>
         <div class="flex">
@@ -40,33 +41,25 @@
                 class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
                 placeholder="Например DOGE"
                 @keydown.enter="add"
+                @input="input"
               />
             </div>
-            <!--<div
+            <div
+              v-show="hints.length > 0"
               class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
             >
               <span
+                v-for="(hint, ndx) in hints"
+                :key="ndx"
                 class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
+                @click="addHint(hint)"
               >
-                BTC
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                DOGE
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                BCH
-              </span>
-              <span
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-              >
-                CHD
+                {{ hint }}
               </span>
             </div>
-            <div class="text-sm text-red-600">Такой тикер уже добавлен</div>-->
+            <div v-show="error" class="text-sm text-red-600">
+              Такой тикер уже добавлен
+            </div>
           </div>
         </div>
         <button
@@ -188,21 +181,45 @@ export default {
       tickers: [],
       sel: null,
       graph: [],
+      loading: false,
+      error: false,
+      coinList: [],
+      hints: [],
     };
   },
   methods: {
+    async getData() {
+      this.loading = true;
+      const f = await fetch(
+        `https://min-api.cryptocompare.com/data/blockchain/list?api_key=1622bb808e582d734ffb6f1b1110778336ec3eae606a024e87de3c665df20720`
+      );
+      const data = await f.json();
+      this.coinList = data.Data;
+      this.loading = false;
+    },
     add() {
+      this.hints = [];
       const currentTicker = {
         name: this.ticker,
         price: "-",
       };
+      if (
+        this.tickers.find(
+          (item) =>
+            String(item.name).toLowerCase() ===
+            String(this.ticker).toLowerCase()
+        )
+      ) {
+        this.error = true;
+        return;
+      }
       this.tickers.push(currentTicker);
       setInterval(async () => {
         const f = await fetch(
           `https://min-api.cryptocompare.com/data/price?fsym=${currentTicker.name}&tsyms=USD&api_key=1622bb808e582d734ffb6f1b1110778336ec3eae606a024e87de3c665df20720`
         );
         const data = await f.json();
-        this.tickers.find((t) => t.name === currentTicker.name).price =
+        this.tickers.find((t) => String(t.name) === currentTicker.name).price =
           data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
 
         if (this.sel?.name === currentTicker.name) {
@@ -227,6 +244,32 @@ export default {
       this.sel = ticker;
       this.graph = [];
     },
+
+    input() {
+      const value = this.ticker.toLowerCase();
+      if (value) {
+        const values = Object.keys(this.coinList).filter((item) => {
+          if (
+            item.toLowerCase().includes(value) ||
+            this.coinList[item].symbol.toLowerCase().includes(value)
+          )
+            return true;
+          return false;
+        });
+        this.hints = values.slice(0, 4);
+      } else {
+        this.hints = [];
+      }
+      if (this.error) this.error = false;
+    },
+
+    addHint(hint) {
+      this.ticker = hint;
+      this.add();
+    },
+  },
+  created() {
+    this.getData();
   },
 };
 </script>

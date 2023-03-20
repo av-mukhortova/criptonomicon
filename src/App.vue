@@ -197,6 +197,21 @@ export default {
       this.coinList = data.Data;
       this.loading = false;
     },
+    subscribeToUpdates(tickerName) {
+      setInterval(async () => {
+        const f = await fetch(
+          `https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=1622bb808e582d734ffb6f1b1110778336ec3eae606a024e87de3c665df20720`
+        );
+        const data = await f.json();
+        this.tickers.find((t) => String(t.name) === tickerName).price =
+          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
+
+        if (this.sel?.name === tickerName) {
+          this.graph.push(data.USD);
+        }
+      }, 5000);
+      this.ticker = "";
+    },
     add() {
       this.hints = [];
       const currentTicker = {
@@ -214,19 +229,8 @@ export default {
         return;
       }
       this.tickers.push(currentTicker);
-      setInterval(async () => {
-        const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${currentTicker.name}&tsyms=USD&api_key=1622bb808e582d734ffb6f1b1110778336ec3eae606a024e87de3c665df20720`
-        );
-        const data = await f.json();
-        this.tickers.find((t) => String(t.name) === currentTicker.name).price =
-          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
-
-        if (this.sel?.name === currentTicker.name) {
-          this.graph.push(data.USD);
-        }
-      }, 5000);
-      this.ticker = "";
+      localStorage.setItem("cryptonomicon-list", JSON.stringify(this.tickers));
+      this.subscribeToUpdates(currentTicker.name);
     },
     handleDelete(tickerToRemove) {
       this.tickers = this.tickers.filter((t) => t !== tickerToRemove);
@@ -270,6 +274,13 @@ export default {
   },
   created() {
     this.getData();
+    const tickersData = localStorage.getItem("cryptonomicon-list");
+    if (tickersData) {
+      this.tickers = JSON.parse(tickersData);
+      this.tickers.forEach((ticker) => {
+        this.subscribeToUpdates(ticker.name);
+      });
+    }
   },
 };
 </script>

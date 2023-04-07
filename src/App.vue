@@ -41,7 +41,6 @@
                 class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
                 placeholder="Например DOGE"
                 @keydown.enter="add"
-                @input="input"
               />
             </div>
             <div
@@ -122,7 +121,7 @@
                 {{ t.name }} - USD
               </dt>
               <dd class="mt-1 text-3xl font-semibold text-gray-900">
-                {{ t.price }}
+                {{ formattedPrice(t.price) }}
               </dd>
             </div>
             <div class="w-full border-t border-gray-200"></div>
@@ -211,6 +210,7 @@
 // [x] График сломан, если везде одинаковые значения
 // [х] При удалении тикера остается пустая страница
 // [x] При удалении тикера остается выбор
+import { loadCoinList, subscribeToTicker, unsubscribeFromTicker } from "./api";
 export default {
   name: "App",
   data() {
@@ -222,9 +222,7 @@ export default {
       graph: [],
       page: 1,
       loading: false,
-      error: false,
       coinList: [],
-      hints: [],
     };
   },
   computed: {
@@ -259,62 +257,7 @@ export default {
         page: this.page,
       };
     },
-  },
-  methods: {
-    async getData() {
-      this.loading = true;
-      const f = await fetch(
-        `https://min-api.cryptocompare.com/data/blockchain/list?api_key=1622bb808e582d734ffb6f1b1110778336ec3eae606a024e87de3c665df20720`
-      );
-      const data = await f.json();
-      this.coinList = data.Data;
-      this.loading = false;
-    },
-    subscribeToUpdates(tickerName) {
-      setInterval(async () => {
-        const f = await fetch(
-          `https://min-api.cryptocompare.com/data/price?fsym=${tickerName}&tsyms=USD&api_key=1622bb808e582d734ffb6f1b1110778336ec3eae606a024e87de3c665df20720`
-        );
-        const data = await f.json();
-        this.tickers.find((t) => String(t.name) === tickerName).price =
-          data.USD > 1 ? data.USD.toFixed(2) : data.USD.toPrecision(2);
-
-        if (this.selectedTicker?.name === tickerName) {
-          this.graph.push(data.USD);
-        }
-      }, 5000);
-      this.ticker = "";
-    },
-    add() {
-      this.filter = "";
-      this.hints = [];
-      const currentTicker = {
-        name: this.ticker,
-        price: "-",
-      };
-      if (
-        this.tickers.find(
-          (item) =>
-            String(item.name).toLowerCase() ===
-            String(this.ticker).toLowerCase()
-        )
-      ) {
-        this.error = true;
-        return;
-      }
-      this.tickers = [...this.tickers, currentTicker];
-      this.subscribeToUpdates(currentTicker.name);
-    },
-    handleDelete(tickerToRemove) {
-      this.tickers = this.tickers.filter((t) => t !== tickerToRemove);
-      if (this.selectedTicker === tickerToRemove) this.selectedTicker = null;
-    },
-
-    select(ticker) {
-      this.selectedTicker = ticker;
-    },
-    /*TODO: убрать в watch и computed*/
-    input() {
+    hints() {
       const value = this.ticker.toLowerCase();
       if (value) {
         const values = Object.keys(this.coinList).filter((item) => {
@@ -325,16 +268,88 @@ export default {
             return true;
           return false;
         });
-        this.hints = values.slice(0, 4);
-      } else {
-        this.hints = [];
+        return values.slice(0, 4);
       }
-      if (this.error) this.error = false;
+      return [];
+    },
+    error() {
+      if (
+        this.tickers.find(
+          (item) =>
+            String(item.name).toLowerCase() ===
+            String(this.ticker).toLowerCase()
+        )
+      ) {
+        return true;
+      }
+      return false;
+    },
+  },
+  methods: {
+    async getCoinList() {
+      this.loading = true;
+      this.coinList = await loadCoinList();
+      this.loading = false;
+    },
+    formattedPrice(price) {
+      if (price === "-") return price;
+      return price > 1
+        ? Number(price).toFixed(2)
+        : Number(price).toPrecision(2);
+    },
+    async updateTickers() {
+      /* if (!this.tickers.length) return;
+
+      const exchangeData = await loadTickers(this.tickers.map((t) => t.name));
+
+      this.tickers.forEach((ticker) => {
+        const price = exchangeData[ticker.name.toUpperCase()];
+        ticker.price = price ?? "-";
+      }); */
+      /* this.tickers.find((t) => String(t.name) === tickerName).price =
+        exchangeData.USD > 1
+          ? exchangeData.USD.toFixed(2)
+          : exchangeData.USD.toPrecision(2);
+
+      if (this.selectedTicker?.name === tickerName) {
+        this.graph.push(exchangeData.USD);
+      }
+      this.ticker = "";  */
+    },
+    add() {
+      this.filter = "";
+      if (!this.error) {
+        const currentTicker = {
+          name: this.ticker,
+          price: "-",
+        };
+        this.ticker = "";
+        this.tickers = [...this.tickers, currentTicker];
+        subscribeToTicker(currentTicker.name, (price) => {
+          this.updateTicker(currentTicker.name, price);
+        });
+      }
+    },
+    handleDelete(tickerToRemove) {
+      this.tickers = this.tickers.filter((t) => t !== tickerToRemove);
+      if (this.selectedTicker === tickerToRemove) this.selectedTicker = null;
+      unsubscribeFromTicker(tickerToRemove.name);
+    },
+
+    select(ticker) {
+      this.selectedTicker = ticker;
     },
 
     addHint(hint) {
       this.ticker = hint;
       this.add();
+    },
+    updateTicker(tickerName, price) {
+      this.tickers
+        .filter((t) => t.name === tickerName)
+        .forEach((t) => {
+          t.price = price;
+        });
     },
   },
   created() {
@@ -354,14 +369,17 @@ export default {
     // if (windowData.page) {
     //   this.page = windowData.page;
     // }
-    this.getData();
+    this.getCoinList();
     const tickersData = localStorage.getItem("cryptonomicon-list");
     if (tickersData) {
       this.tickers = JSON.parse(tickersData);
       this.tickers.forEach((ticker) => {
-        this.subscribeToUpdates(ticker.name);
+        subscribeToTicker(ticker.name, (price) => {
+          this.updateTicker(ticker.name, price);
+        });
       });
     }
+    // setInterval(this.updateTickers(), 5000);
   },
   watch: {
     // убрали это из действия handleDelete, т.к. это не логика удаления

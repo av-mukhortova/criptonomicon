@@ -197,7 +197,7 @@
 // очень важно разделять логику при выполнений действий и побочную
 // [] 1. Наличие в состоянии зависимых данных | Критичность: 5+  -- перенесли в computed (не изменяет состояние, возвращает какое-то значение, которое используется в шаблоне)
 // [] 2. Обработка ошибок API | Критичность: 5
-// [] 3. Запросы напрямую внутри компонента (???) | Критичность: 5
+// [x] 3. Запросы напрямую внутри компонента (???) | Критичность: 5
 // [] 4. При удалении остается подписка на загрузку тикера | Критичность: 5
 // [] 5. Количество запросов | Критичность: 4
 // [x] 6. При удалении тикера не изменяется localStorage | Критичность: 4
@@ -297,25 +297,6 @@ export default {
         ? Number(price).toFixed(2)
         : Number(price).toPrecision(2);
     },
-    async updateTickers() {
-      /* if (!this.tickers.length) return;
-
-      const exchangeData = await loadTickers(this.tickers.map((t) => t.name));
-
-      this.tickers.forEach((ticker) => {
-        const price = exchangeData[ticker.name.toUpperCase()];
-        ticker.price = price ?? "-";
-      }); */
-      /* this.tickers.find((t) => String(t.name) === tickerName).price =
-        exchangeData.USD > 1
-          ? exchangeData.USD.toFixed(2)
-          : exchangeData.USD.toPrecision(2);
-
-      if (this.selectedTicker?.name === tickerName) {
-        this.graph.push(exchangeData.USD);
-      }
-      this.ticker = "";  */
-    },
     add() {
       this.filter = "";
       if (!this.error) {
@@ -349,6 +330,9 @@ export default {
         .filter((t) => t.name === tickerName)
         .forEach((t) => {
           t.price = price;
+          if (t === this.selectedTicker) {
+            this.graph.push(price);
+          }
         });
     },
   },
@@ -363,12 +347,7 @@ export default {
         this[key] = windowData.key;
       }
     });
-    // if (windowData.filter) {
-    //   this.filter = windowData.filter;
-    // }
-    // if (windowData.page) {
-    //   this.page = windowData.page;
-    // }
+
     this.getCoinList();
     const tickersData = localStorage.getItem("cryptonomicon-list");
     if (tickersData) {
@@ -379,7 +358,6 @@ export default {
         });
       });
     }
-    // setInterval(this.updateTickers(), 5000);
   },
   watch: {
     // убрали это из действия handleDelete, т.к. это не логика удаления

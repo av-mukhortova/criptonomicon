@@ -110,9 +110,11 @@
           <div
             v-for="t in paginatedTickers"
             :key="t.name"
-            class="bg-white overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
+            class="overflow-hidden shadow rounded-lg border-purple-800 border-solid cursor-pointer"
             :class="{
               'border-4': selectedTicker === t,
+              'bg-white': !t.error,
+              'bg-red-100': t.error,
             }"
             @click="select(t)"
           >
@@ -306,8 +308,12 @@ export default {
         };
         this.ticker = "";
         this.tickers = [...this.tickers, currentTicker];
-        subscribeToTicker(currentTicker.name, (price) => {
-          this.updateTicker(currentTicker.name, price);
+        subscribeToTicker(currentTicker.name, (price, isValid = true) => {
+          if (isValid) {
+            this.updateTicker(currentTicker.name, price);
+          } else {
+            this.highlightTicker(currentTicker.name);
+          }
         });
       }
     },
@@ -335,6 +341,13 @@ export default {
           }
         });
     },
+    highlightTicker(tickerName) {
+      this.tickers
+        .filter((t) => t.name === tickerName)
+        .forEach((t) => {
+          t.error = true;
+        });
+    },
   },
   created() {
     const windowData = Object.fromEntries(
@@ -353,8 +366,12 @@ export default {
     if (tickersData) {
       this.tickers = JSON.parse(tickersData);
       this.tickers.forEach((ticker) => {
-        subscribeToTicker(ticker.name, (price) => {
-          this.updateTicker(ticker.name, price);
+        subscribeToTicker(ticker.name, (price, isValid = true) => {
+          if (isValid) {
+            this.updateTicker(ticker.name, price);
+          } else {
+            this.highlightTicker(ticker.name);
+          }
         });
       });
     }

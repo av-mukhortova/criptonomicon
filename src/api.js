@@ -9,19 +9,26 @@ const socket = new WebSocket(
 );
 
 const AGGREGATE_INDEX = "5";
+const ERROR_INDEX = "500";
 
 socket.addEventListener("message", (e) => {
   const {
     TYPE: type,
     FROMSYMBOL: currency,
     PRICE: newPrice,
+    MESSAGE: message,
+    PARAMETER: param,
   } = JSON.parse(e.data);
-  if (type !== AGGREGATE_INDEX || !newPrice) {
+
+  if (type === ERROR_INDEX && message === "INVALID_SUB") {
+    updateTicker(param.split("~")[2], 0, false);
     return;
   }
 
-  const handlers = tickersHandlers.get(currency) ?? [];
-  handlers.forEach((fn) => fn(newPrice));
+  if (type !== AGGREGATE_INDEX || !newPrice) {
+    return;
+  }
+  updateTicker(currency, newPrice, true);
 });
 
 export const loadCoinList = () =>
@@ -72,6 +79,11 @@ export const unsubscribeFromTicker = (ticker) => {
   tickersHandlers.delete(ticker);
   unsubscribeFromTickerOnWs(ticker);
 };
+
+function updateTicker(currency, newPrice, isValid) {
+  const handlers = tickersHandlers.get(currency) ?? [];
+  handlers.forEach((fn) => fn(newPrice, isValid));
+}
 
 // БИЗНЕС-ЗАДАЧА
 // получить стоимость криптовалютных пар с АПИшки?

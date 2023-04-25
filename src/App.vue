@@ -26,62 +26,11 @@
       </svg>
     </div>
     <div class="container">
-      <section>
-        <div class="flex">
-          <div class="max-w-xs">
-            <label for="wallet" class="block text-sm font-medium text-gray-700"
-              >Тикер {{ ticker }}</label
-            >
-            <div class="mt-1 relative rounded-md shadow-md">
-              <input
-                v-model="ticker"
-                type="text"
-                name="wallet"
-                id="wallet"
-                class="block w-full pr-10 border-gray-300 text-gray-900 focus:outline-none focus:ring-gray-500 focus:border-gray-500 sm:text-sm rounded-md"
-                placeholder="Например DOGE"
-                @keydown.enter="add"
-              />
-            </div>
-            <div
-              v-show="hints.length > 0"
-              class="flex bg-white shadow-md p-1 rounded-md shadow-md flex-wrap"
-            >
-              <span
-                v-for="(hint, ndx) in hints"
-                :key="ndx"
-                class="inline-flex items-center px-2 m-1 rounded-md text-xs font-medium bg-gray-300 text-gray-800 cursor-pointer"
-                @click="addHint(hint)"
-              >
-                {{ hint }}
-              </span>
-            </div>
-            <div v-show="error" class="text-sm text-red-600">
-              Такой тикер уже добавлен
-            </div>
-          </div>
-        </div>
-        <button
-          type="button"
-          class="my-4 inline-flex items-center py-2 px-4 border border-transparent shadow-sm text-sm leading-4 font-medium rounded-full text-white bg-gray-600 hover:bg-gray-700 transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-          @click="add"
-        >
-          <!-- Heroicon name: solid/mail -->
-          <svg
-            class="-ml-0.5 mr-2 h-6 w-6"
-            xmlns="http://www.w3.org/2000/svg"
-            width="30"
-            height="30"
-            viewBox="0 0 24 24"
-            fill="#ffffff"
-          >
-            <path
-              d="M13 7h-2v4H7v2h4v4h2v-4h4v-2h-4V7zm-1-5C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"
-            ></path>
-          </svg>
-          Добавить
-        </button>
-      </section>
+      <add-ticker
+        :tickers="tickers"
+        :disabled="tooManyTickersAdded"
+        @add-ticker="add"
+      />
 
       <template v-if="tickers.length">
         <hr class="w-full border-t border-gray-600 my-4" />
@@ -150,16 +99,20 @@
         </dl>
         <hr class="w-full border-t border-gray-600 my-4" />
       </template>
+      <!--TODO: вынести график в отдельный компонент-->
       <section v-if="selectedTicker" class="relative">
         <h3 class="text-lg leading-6 font-medium text-gray-900 my-8">
           {{ selectedTicker.name }} - USD
         </h3>
-        <div class="flex items-end border-gray-600 border-b border-l h-64">
+        <div
+          ref="graph"
+          class="flex items-end border-gray-600 border-b border-l h-64"
+        >
           <div
             v-for="(bar, idx) in normalizedGraph"
             :key="idx"
-            :style="{ height: `${bar}%` }"
-            class="bg-purple-800 border w-10"
+            :style="{ height: `${bar}%`, width: `${elementWidth}px` }"
+            class="bg-purple-800 border"
           ></div>
         </div>
         <button
@@ -200,31 +153,33 @@
 // [] 1. Наличие в состоянии зависимых данных | Критичность: 5+  -- перенесли в computed (не изменяет состояние, возвращает какое-то значение, которое используется в шаблоне)
 // [] 2. Обработка ошибок API | Критичность: 5
 // [x] 3. Запросы напрямую внутри компонента (???) | Критичность: 5
-// [] 4. При удалении остается подписка на загрузку тикера | Критичность: 5
-// [] 5. Количество запросов | Критичность: 4
+// [x] 4. При удалении остается подписка на загрузку тикера | Критичность: 5
+// [x] 5. Количество запросов | Критичность: 4
 // [x] 6. При удалении тикера не изменяется localStorage | Критичность: 4
 // [x] 7. Одинаковый код в watch | Критичность : 3
 // [] 8. localStorage и анонимные вкладки (localStorage м.б. не доступен) | Критичность: 3
-// [] 9. График ужасно выглядит, если будет много цен | Критичность: 2
+// [x] 9. График ужасно выглядит, если будет много цен | Критичность: 2
 // [] 10. Магические строки и числа (URL, 5000 милисекунд задержки, ключ localStorage) | Критичность: 1
 // написать критерии оценки
 // Параллельно
 // [x] График сломан, если везде одинаковые значения
 // [х] При удалении тикера остается пустая страница
 // [x] При удалении тикера остается выбор
-import { loadCoinList, subscribeToTicker, unsubscribeFromTicker } from "./api";
+import { subscribeToTicker, unsubscribeFromTicker } from "./api";
+import AddTicker from "./components/AddTicker.vue";
 export default {
+  components: { AddTicker },
   name: "App",
   data() {
     return {
-      ticker: "",
       filter: "",
       tickers: [],
       selectedTicker: null,
       graph: [],
       page: 1,
       loading: false,
-      coinList: [],
+      maxGraphElements: 0,
+      elementWidth: 38,
     };
   },
   computed: {
@@ -259,63 +214,31 @@ export default {
         page: this.page,
       };
     },
-    hints() {
-      const value = this.ticker.toLowerCase();
-      if (value) {
-        const values = Object.keys(this.coinList).filter((item) => {
-          if (
-            item.toLowerCase().includes(value) ||
-            this.coinList[item].symbol.toLowerCase().includes(value)
-          )
-            return true;
-          return false;
-        });
-        return values.slice(0, 4);
-      }
-      return [];
-    },
-    error() {
-      if (
-        this.tickers.find(
-          (item) =>
-            String(item.name).toLowerCase() ===
-            String(this.ticker).toLowerCase()
-        )
-      ) {
-        return true;
-      }
-      return false;
+    tooManyTickersAdded() {
+      return this.tickers.length > 4;
     },
   },
   methods: {
-    async getCoinList() {
-      this.loading = true;
-      this.coinList = await loadCoinList();
-      this.loading = false;
-    },
     formattedPrice(price) {
       if (price === "-") return price;
       return price > 1
         ? Number(price).toFixed(2)
         : Number(price).toPrecision(2);
     },
-    add() {
+    add(ticker) {
       this.filter = "";
-      if (!this.error) {
-        const currentTicker = {
-          name: this.ticker,
-          price: "-",
-        };
-        this.ticker = "";
-        this.tickers = [...this.tickers, currentTicker];
-        subscribeToTicker(currentTicker.name, (price, isValid = true) => {
-          if (isValid) {
-            this.updateTicker(currentTicker.name, price);
-          } else {
-            this.highlightTicker(currentTicker.name);
-          }
-        });
-      }
+      const currentTicker = {
+        name: ticker,
+        price: "-",
+      };
+      this.tickers = [...this.tickers, currentTicker];
+      subscribeToTicker(currentTicker.name, (price, isValid = true) => {
+        if (isValid) {
+          this.updateTicker(currentTicker.name, price);
+        } else {
+          this.highlightTicker(currentTicker.name);
+        }
+      });
     },
     handleDelete(tickerToRemove) {
       this.tickers = this.tickers.filter((t) => t !== tickerToRemove);
@@ -325,12 +248,11 @@ export default {
 
     select(ticker) {
       this.selectedTicker = ticker;
+      this.$nextTick(() => {
+        this.calculateMaxGraphElements();
+      });
     },
 
-    addHint(hint) {
-      this.ticker = hint;
-      this.add();
-    },
     updateTicker(tickerName, price) {
       this.tickers
         .filter((t) => t.name === tickerName)
@@ -338,6 +260,7 @@ export default {
           t.price = price;
           if (t === this.selectedTicker) {
             this.graph.push(price);
+            this.sliceGraph();
           }
         });
     },
@@ -347,6 +270,18 @@ export default {
         .forEach((t) => {
           t.error = true;
         });
+    },
+    calculateMaxGraphElements() {
+      if (!this.$refs.graph) return;
+      this.maxGraphElements = this.$refs.graph.clientWidth / this.elementWidth;
+      this.sliceGraph();
+    },
+    sliceGraph() {
+      if (this.graph.length > this.maxGraphElements) {
+        this.graph = this.graph.slice(
+          this.graph.length - this.maxGraphElements + 1
+        );
+      }
     },
   },
   created() {
@@ -361,7 +296,6 @@ export default {
       }
     });
 
-    this.getCoinList();
     const tickersData = localStorage.getItem("cryptonomicon-list");
     if (tickersData) {
       this.tickers = JSON.parse(tickersData);
@@ -375,6 +309,12 @@ export default {
         });
       });
     }
+  },
+  mounted() {
+    window.addEventListener("resize", this.calculateMaxGraphElements);
+  },
+  beforeUnmount() {
+    window.removeEventListener("resize", this.calculateMaxGraphElements);
   },
   watch: {
     // убрали это из действия handleDelete, т.к. это не логика удаления

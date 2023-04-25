@@ -21,7 +21,8 @@ socket.addEventListener("message", (e) => {
   } = JSON.parse(e.data);
 
   if (type === ERROR_INDEX && message === "INVALID_SUB") {
-    updateTicker(param.split("~")[2], 0, false);
+    const tickerName = param.split("~")[2];
+    updateTicker(tickerName, 0, false);
     return;
   }
 
@@ -55,10 +56,10 @@ function sendToWebSocket(message) {
   );
 }
 
-function subscribeToTickerOnWs(ticker) {
+function subscribeToTickerOnWs(ticker, type) {
   sendToWebSocket({
     action: "SubAdd",
-    subs: [`5~CCCAGG~${ticker}~USD`],
+    subs: [`5~CCCAGG~${ticker}~${type}`],
   });
 }
 
@@ -72,7 +73,7 @@ function unsubscribeFromTickerOnWs(ticker) {
 export const subscribeToTicker = (ticker, cb) => {
   const subscribers = tickersHandlers.get(ticker) || [];
   tickersHandlers.set(ticker, [...subscribers, cb]);
-  subscribeToTickerOnWs(ticker);
+  subscribeToTickerOnWs(ticker, "USD");
 };
 
 export const unsubscribeFromTicker = (ticker) => {

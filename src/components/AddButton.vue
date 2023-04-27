@@ -23,7 +23,7 @@
 <script>
 export default {
   props: {
-    disabled: { type: Boolean, defult: false },
+    disabled: { type: Boolean, default: false },
   },
 };
 </script>
